@@ -24,7 +24,7 @@ public class LedgerSyncApp {
         String date;
         String status;
 
-        public BankRecord(String txnId, String vendorName, double amount, String date, String status) {
+        BankRecord(String txnId, String vendorName, double amount, String date, String status) {
             this.txnId = txnId;
             this.vendorName = vendorName;
             this.amount = amount;
@@ -41,7 +41,8 @@ public class LedgerSyncApp {
         double totalAmount;
         String date;
 
-        public InvoiceData(String invoiceNumber, String vendorName, double subtotal, double tax, double totalAmount, String date) {
+        InvoiceData(String invoiceNumber, String vendorName, double subtotal,
+                    double tax, double totalAmount, String date) {
             this.invoiceNumber = invoiceNumber;
             this.vendorName = vendorName;
             this.subtotal = subtotal;
@@ -53,142 +54,173 @@ public class LedgerSyncApp {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        System.out.println("================================================================");
-        System.out.println("LedgerSync: AI 3-Way Invoice Reconciliation Engine (Java)");
-        System.out.println("Track 4: AI Finance Controller | Razorpay AI Builder 2026");
-        System.out.println("================================================================\n");
+
+        System.out.println("LedgerSync - Invoice Reconciliation");
+        System.out.println("Razorpay AI Builder 2026 | Track 4\n");
 
         List<BankRecord> bankRecords = loadBankRecords("bank_records.csv");
-        System.out.println("Loaded " + bankRecords.size() + " settlement records from bank_records.csv.\n");
+        System.out.println("Loaded " + bankRecords.size() + " bank records.\n");
 
-        System.out.print("Enter Gemini API Key (Press Enter to use built-in demo payload): ");
+        System.out.print("Gemini API key (press Enter for demo): ");
         String apiKey = scanner.nextLine().trim();
 
-        InvoiceData extractedInvoice;
-
-        if (!apiKey.isEmpty()) {
-            System.out.print("Enter invoice image path (e.g., sample_invoice.jpg): ");
+        InvoiceData invoice;
+        if (apiKey.isEmpty()) {
+            System.out.println("Using demo invoice data.\n");
+            invoice = new InvoiceData(
+                    "INV-2026-089", "Google India", 1271.18,
+                    228.82, 1500.00, "2026-05-10");
+        } else {
+            System.out.print("Invoice image path: ");
             String imagePath = scanner.nextLine().trim();
-            extractedInvoice = extractInvoiceWithGemini(apiKey, imagePath);
+            invoice = extractInvoiceWithGemini(apiKey, imagePath);
+        }
+
+        printInvoice(invoice);
+
+        double calculatedTotal = invoice.subtotal + invoice.tax;
+        boolean mathOk = Math.abs(calculatedTotal - invoice.totalAmount) < 0.05;
+
+        System.out.println("\nNumber check");
+        System.out.printf("%.2f + %.2f = %.2f%n",
+                invoice.subtotal, invoice.tax, calculatedTotal);
+        System.out.println(mathOk ? "Invoice calculation: OK" : "Invoice calculation: MISMATCH");
+
+        BankRecord match = findBankRecord(bankRecords, invoice.vendorName);
+        boolean amountOk = match != null
+                && Math.abs(match.amount - invoice.totalAmount) < 0.05;
+
+        System.out.println("\nBank check");
+        if (match == null) {
+            System.out.println("No bank record found for this vendor.");
         } else {
-            System.out.println("Running audit on mock extracted invoice payload...");
-            extractedInvoice = new InvoiceData("INV-2026-089", "Google India", 1271.18, 228.82, 1500.00, "2026-05-10");
+            System.out.printf("Found transaction %s for INR %.2f (%s)%n",
+                    match.txnId, match.amount, match.status);
+            System.out.println(amountOk ? "Amount check: OK" : "Amount check: MISMATCH");
         }
 
-        System.out.println("\n----------------- 1. EXTRACTED INVOICE ENTITIES -----------------");
-        System.out.printf("Invoice Number : %s%n", extractedInvoice.invoiceNumber);
-        System.out.printf("Vendor Name    : %s%n", extractedInvoice.vendorName);
-        System.out.printf("Subtotal       : INR %.2f%n", extractedInvoice.subtotal);
-        System.out.printf("Tax (GST)      : INR %.2f%n", extractedInvoice.tax);
-        System.out.printf("Total Amount   : INR %.2f%n", extractedInvoice.totalAmount);
-        System.out.printf("Invoice Date   : %s%n", extractedInvoice.date);
-
-        System.out.println("\n----------------- 2. DETERMINISTIC MATH VALIDATION --------------");
-        double calculatedTotal = extractedInvoice.subtotal + extractedInvoice.tax;
-        boolean isMathValid = Math.abs(calculatedTotal - extractedInvoice.totalAmount) < 0.05;
-
-        if (isMathValid) {
-            System.out.printf("Subtotal (INR %.2f) + Tax (INR %.2f) = Total (INR %.2f) [PASSED]%n",
-                    extractedInvoice.subtotal, extractedInvoice.tax, extractedInvoice.totalAmount);
+        System.out.println("\nResult");
+        if (mathOk && amountOk) {
+            System.out.println("RECONCILED");
+            System.out.printf("Transaction: %s | Date: %s%n", match.txnId, match.date);
         } else {
-            System.out.printf("Calculation Error: Subtotal + Tax = INR %.2f, but Total on bill is INR %.2f [FAILED]%n",
-                    calculatedTotal, extractedInvoice.totalAmount);
+            System.out.println("MANUAL REVIEW NEEDED");
         }
 
-        System.out.println("\n----------------- 3. 3-WAY BANK LEDGER RECONCILIATION ----------");
-        BankRecord matchedRecord = null;
-
-        for (BankRecord record : bankRecords) {
-            if (record.vendorName.toLowerCase().contains(extractedInvoice.vendorName.toLowerCase().substring(0, Math.min(5, extractedInvoice.vendorName.length())))
-                    || extractedInvoice.vendorName.toLowerCase().contains(record.vendorName.toLowerCase().substring(0, Math.min(5, record.vendorName.length())))) {
-                matchedRecord = record;
-                break;
-            }
-        }
-
-        boolean bankMatchFound = (matchedRecord != null);
-        boolean amountMatch = bankMatchFound && (Math.abs(matchedRecord.amount - extractedInvoice.totalAmount) < 0.05);
-
-        System.out.println("\n====================== FINAL AUDIT VERDICT ======================");
-        if (isMathValid && bankMatchFound && amountMatch) {
-            System.out.println("STATUS: RECONCILED & APPROVED FOR SETTLEMENT");
-            System.out.printf("Matched with Bank Txn ID: %s | Settled Amount: INR %.2f | Date: %s%n",
-                    matchedRecord.txnId, matchedRecord.amount, matchedRecord.date);
-        } else {
-            System.out.println("STATUS: FLAGGED FOR MANUAL AUDIT REVIEW");
-            if (!isMathValid) {
-                System.out.println("Invoice tax and subtotal arithmetic integrity check failed.");
-            }
-            if (!bankMatchFound) {
-                System.out.println("No matching vendor transaction found in bank settlement ledger.");
-            } else if (!amountMatch) {
-                System.out.printf("Amount mismatch: Invoice states INR %.2f, Bank settled INR %.2f.%n",
-                        extractedInvoice.totalAmount, matchedRecord.amount);
-            }
-        }
-        System.out.println("=================================================================\n");
         scanner.close();
+    }
+
+    private static void printInvoice(InvoiceData invoice) {
+        System.out.println("Invoice");
+        System.out.println("Number : " + invoice.invoiceNumber);
+        System.out.println("Vendor : " + invoice.vendorName);
+        System.out.printf("Subtotal: INR %.2f%n", invoice.subtotal);
+        System.out.printf("Tax     : INR %.2f%n", invoice.tax);
+        System.out.printf("Total   : INR %.2f%n", invoice.totalAmount);
+        System.out.println("Date    : " + invoice.date);
+    }
+
+    private static BankRecord findBankRecord(List<BankRecord> records, String vendor) {
+        String invoiceVendor = vendor.toLowerCase();
+        int length = Math.min(5, invoiceVendor.length());
+        String prefix = invoiceVendor.substring(0, length);
+
+        for (BankRecord record : records) {
+            String bankVendor = record.vendorName.toLowerCase();
+            int bankLength = Math.min(5, bankVendor.length());
+            String bankPrefix = bankVendor.substring(0, bankLength);
+
+            if (bankVendor.contains(prefix) || invoiceVendor.contains(bankPrefix)) {
+                return record;
+            }
+        }
+        return null;
     }
 
     private static List<BankRecord> loadBankRecords(String filePath) {
         List<BankRecord> records = new ArrayList<>();
+
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
-            String line = br.readLine();
+            br.readLine();
+            String line;
+
             while ((line = br.readLine()) != null) {
                 String[] values = line.split(",");
                 if (values.length >= 5) {
-                    records.add(new BankRecord(values[0].trim(), values[1].trim(),
-                            Double.parseDouble(values[2].trim()), values[3].trim(), values[4].trim()));
+                    records.add(new BankRecord(
+                            values[0].trim(),
+                            values[1].trim(),
+                            Double.parseDouble(values[2].trim()),
+                            values[3].trim(),
+                            values[4].trim()));
                 }
             }
-        } catch (IOException e) {
-            records.add(new BankRecord("TXN_101", "Google India", 1500.00, "2026-05-10", "Settled"));
+        } catch (Exception e) {
+            System.out.println("Could not read bank_records.csv, using demo record.");
+            records.add(new BankRecord(
+                    "TXN_101", "Google India", 1500.00, "2026-05-10", "Settled"));
         }
+
         return records;
     }
 
     private static InvoiceData extractInvoiceWithGemini(String apiKey, String imagePath) {
         try {
             byte[] imageBytes = Files.readAllBytes(Path.of(imagePath));
-            String base64Image = Base64.getEncoder().encodeToString(imageBytes);
+            String image = Base64.getEncoder().encodeToString(imageBytes);
 
             String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
-            String prompt = "Extract data from this invoice. Return RAW JSON only with keys: "
-                    + "\"invoice_number\"(string), \"vendor_name\"(string), \"subtotal\"(float), \"tax\"(float), \"total_amount\"(float), \"date\"(YYYY-MM-DD).";
+            String prompt = "Read this invoice and return JSON only with these keys: "
+                    + "invoice_number, vendor_name, subtotal, tax, total_amount, date. "
+                    + "Use YYYY-MM-DD for the date.";
 
-            JSONObject jsonBody = new JSONObject()
+            JSONObject body = new JSONObject()
                     .put("contents", new JSONArray()
                             .put(new JSONObject().put("parts", new JSONArray()
                                     .put(new JSONObject().put("text", prompt))
                                     .put(new JSONObject().put("inline_data", new JSONObject()
                                             .put("mime_type", "image/jpeg")
-                                            .put("data", base64Image))))));
+                                            .put("data", image))))));
 
-            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(15))
+                    .build();
+
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody.toString()))
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                     .build();
 
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            JSONObject resJson = new JSONObject(response.body());
-            String rawText = resJson.getJSONArray("candidates").getJSONObject(0)
-                    .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text");
+            HttpResponse<String> response = client.send(
+                    request, HttpResponse.BodyHandlers.ofString());
 
-            String cleanJson = rawText.replace("```json", "").replace("```", "").strip();
-            JSONObject parsed = new JSONObject(cleanJson);
+            JSONObject result = new JSONObject(response.body());
+            String text = result.getJSONArray("candidates")
+                    .getJSONObject(0)
+                    .getJSONObject("content")
+                    .getJSONArray("parts")
+                    .getJSONObject(0)
+                    .getString("text")
+                    .replace("```json", "")
+                    .replace("```", "")
+                    .trim();
+
+            JSONObject data = new JSONObject(text);
 
             return new InvoiceData(
-                    parsed.optString("invoice_number", "INV-UNKNOWN"),
-                    parsed.optString("vendor_name", "Unknown"),
-                    parsed.optDouble("subtotal", 0.0),
-                    parsed.optDouble("tax", 0.0),
-                    parsed.optDouble("total_amount", 0.0),
-                    parsed.optString("date", "2026-01-01")
-            );
+                    data.optString("invoice_number", "INV-UNKNOWN"),
+                    data.optString("vendor_name", "Unknown"),
+                    data.optDouble("subtotal", 0),
+                    data.optDouble("tax", 0),
+                    data.optDouble("total_amount", 0),
+                    data.optString("date", "Unknown"));
         } catch (Exception e) {
-            return new InvoiceData("INV-2026-089", "Google India", 1271.18, 228.82, 1500.00, "2026-05-10");
+            System.out.println("Could not extract the invoice: " + e.getMessage());
+            System.out.println("Falling back to the demo invoice.\n");
+            return new InvoiceData(
+                    "INV-2026-089", "Google India", 1271.18,
+                    228.82, 1500.00, "2026-05-10");
         }
     }
 }
