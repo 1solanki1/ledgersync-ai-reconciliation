@@ -1,31 +1,39 @@
-# LedgerSync: Autonomous AI 3-Way Invoice Reconciliation Engine
+# LedgerSync – Invoice Reconciliation in Java
 
-LedgerSync is an agentic invoice reconciliation engine built in Java for the Razorpay AI Builder 2026 program (Track 4: AI Finance Controller). It automates the extraction, arithmetic verification, and ledger cross-matching of unstructured vendor invoices against bank settlement records.
+LedgerSync is a small Java project for checking vendor invoices against bank settlement records. I built it for the Razorpay AI Builder 2026 program (Track 4: AI Finance Controller).
 
----
+The main idea is simple: use an AI model to read the useful fields from an invoice, then do the actual checks in Java instead of asking the model to decide whether the numbers are correct.
 
-## Architecture & Workflow
+## What it does
 
-1. **Multimodal Extraction:** Communicates with Vision-LLMs (Gemini 1.5 Flash) via native Java `HttpClient` to parse unstructured invoice images/PDFs into structured JSON.
-2. **Deterministic Arithmetic Verification:** Decouples numeric calculations from the LLM, validating `Subtotal + Tax == Total` directly in Java to prevent arithmetic hallucinations.
-3. **3-Way Cross Matching:** Executes matching logic between the parsed invoice data and the bank settlement ledger (`bank_records.csv`).
-4. **Audit Flagging:** Flags discrepancies in taxes, duplicate bills, and unsettled amounts with audit-ready log outputs.
+The current version has three main steps:
 
----
+1. Reads invoice details such as invoice number, vendor, subtotal, tax, total and date.
+2. Checks `subtotal + tax = total` in Java.
+3. Looks for the vendor in `bank_records.csv` and compares the invoice amount with the settled amount.
 
-## Tech Stack
+If the checks pass, the invoice is marked as reconciled. Otherwise it is sent for manual review.
 
-* **Language:** Java 17+
-* **Build Tool:** Apache Maven
-* **JSON Processing:** `org.json`
-* **AI Model Endpoint:** Gemini 1.5 Flash REST API
+## Where AI is used
 
----
+When an API key is provided, the program sends an invoice image to Gemini and asks it to return the relevant fields as JSON.
 
-## Project Structure
+The calculations and reconciliation rules are kept in Java. This is intentional because arithmetic and matching should not depend on an LLM response.
+
+For a quick demo, pressing Enter instead of entering an API key uses a sample invoice already included in the program.
+
+## Tech used
+
+- Java 17+
+- Maven
+- `org.json`
+- Gemini REST API
+- CSV file for sample bank records
+
+## Project structure
 
 ```text
-ledgersync-java/
+ledgersync-ai-reconciliation/
 ├── pom.xml
 ├── bank_records.csv
 ├── .gitignore
@@ -37,30 +45,56 @@ ledgersync-java/
             └── LedgerSyncApp.java
 ```
 
-## Getting Started
+## Running it
 
-### Prerequisites
+### Requirements
 
-- Java Development Kit (JDK 17 or higher)
-- Apache Maven 3.8+
+- JDK 17 or newer
+- Maven 3.8+
 
-### Setup & Execution
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/<YOUR_GITHUB_USERNAME>/ledgersync-ai-reconciliation.git
-cd ledgersync-ai-reconciliation
-```
-
-2. Compile the project:
+### Build
 
 ```bash
 mvn clean compile
 ```
 
-3. Run the application:
+### Run
 
 ```bash
 mvn exec:java
 ```
+
+The program first loads the sample bank records. You can then either enter a Gemini API key and an invoice image path, or press Enter to run the built-in demo.
+
+## Example
+
+The demo invoice is for `Google India` with:
+
+- Subtotal: INR 1271.18
+- Tax: INR 228.82
+- Total: INR 1500.00
+
+The Java calculation checks that the first two values add up to the invoice total and then compares the total with the matching bank record.
+
+## Current limitations
+
+This is a project/demo implementation rather than a production accounting system.
+
+- The bank data is read from a simple CSV file.
+- Vendor matching is currently basic and can be improved.
+- The Gemini request currently expects an image input.
+- Invoice extraction can still need human verification.
+- Authentication, database storage and a proper audit database are not included yet.
+
+## AI use during development
+
+AI tools were used during development for brainstorming, debugging, explaining API usage and improving parts of the implementation. I reviewed and adapted the resulting code and kept the core reconciliation checks deterministic in Java.
+
+## Future improvements
+
+- Better vendor and invoice matching
+- Support for PDF invoices
+- More invoice validation rules
+- Database-backed records
+- A small web interface for uploading invoices
+- Better error handling and audit history
