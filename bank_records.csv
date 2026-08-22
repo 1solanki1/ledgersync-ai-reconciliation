@@ -1,0 +1,5 @@
+txn_id,vendor_name,amount,date,status
+TXN_101,Google India,1500.00,2026-05-10,Settled
+TXN_102,AWS Cloud Services,3450.00,2026-05-11,Settled
+TXN_103,Razorpay Software,500.00,2026-05-12,Settled
+TXN_104,Office Supplies Corp,1250.00,2026-05-13,Settled
